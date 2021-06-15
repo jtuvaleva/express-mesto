@@ -1,4 +1,3 @@
-const mongoose = require('mongoose');
 const User = require('../models/user');
 
 const errCode = 400;
@@ -12,16 +11,20 @@ module.exports.getUsers = (req, res) => {
 };
 
 module.exports.getUser = (req, res) => {
-  const userId = mongoose.Types.ObjectId(req.params.id.toString());
-  User.findById(userId)
+  User.findById(req.params.id)
+    .orFail(new Error('UserNotFound'))
     .then((user) => {
-      if (user) {
-        res.send({ data: user });
-      } else {
-        res.status(errCodeNotFound).send({ message: 'Запрашиваемый пользователь не найден' });
-      }
+      res.send({ data: user });
     })
-    .catch(() => res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' }));
+    .catch((err) => {
+      if (err.message === 'UserNotFound') {
+        res.status(errCodeNotFound).send({ message: 'Запрашиваемый пользователь не найден' });
+      } else if (err.name === 'CastError') {
+        res.status(errCode).send({ message: 'Невалидный id' });
+      } else {
+        res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
+      }
+    });
 };
 
 module.exports.createUser = (req, res) => {
@@ -58,16 +61,17 @@ module.exports.updateProfile = (req, res) => {
       runValidators: true,
     },
   )
+    .orFail(new Error('UserNotFound'))
     .then((user) => {
-      if (user) {
-        res.send({ user });
-      } else {
-        res.status(errCodeNotFound).send({ message: 'Пользователь с указанным _id не найден' });
-      }
+      res.send({ user });
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
         res.status(errCode).send({ message: 'Переданы некорректные данные при обновлении профиля' });
+      } else if (err.name === 'CastError') {
+        res.status(errCode).send({ message: 'Невалидный id пользователя' });
+      } else if (err.message === 'UserNotFound') {
+        res.status(errCodeNotFound).send({ message: 'Пользователь с указанным _id не найден' });
       } else {
         res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
       }
@@ -85,16 +89,17 @@ module.exports.updateAvatar = (req, res) => {
       runValidators: true,
     },
   )
+    .orFail(new Error('UserNotFound'))
     .then((user) => {
-      if (user) {
-        res.send({ user });
-      } else {
-        res.status(errCodeNotFound).send({ message: 'Пользователь с указанным _id не найден' });
-      }
+      res.send({ user });
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
         res.status(errCode).send({ message: 'Переданы некорректные данные при обновлении аватара' });
+      } else if (err.name === 'CastError') {
+        res.status(errCode).send({ message: 'Невалидный id пользователя' });
+      } else if (err.message === 'UserNotFound') {
+        res.status(errCodeNotFound).send({ message: 'Пользователь с указанным _id не найден' });
       } else {
         res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
       }
