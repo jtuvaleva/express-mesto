@@ -1,47 +1,71 @@
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const User = require('../models/user');
 
-const errCode = 400;
-const errCodeNotFound = 404;
-const errCodeDefault = 500;
+const NotFoundError = require('../errors/not-found-err');
+const CastError = require('../errors/cast-err');
+const BadRequestError = require('../errors/bad-request-err');
+const DuplicatedIdError = require('../errors/duplicated-id-err');
+const AuthError = require('../errors/auth-err');
 
-module.exports.getUsers = (req, res) => {
-  User.find({})
-    .then((users) => res.send({ data: users }))
-    .catch(() => res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' }));
+module.exports.getCurrentUser = (req, res, next) => {
+  User.findById(req.user._id)
+    .orFail(new NotFoundError('Запрашиваемый пользователь не найден'))
+    .then((user) => {
+      res.send({ data: user });
+    })
+    .catch((err) => next(err));
 };
 
-module.exports.getUser = (req, res) => {
+module.exports.getUser = (req, res, next) => {
   User.findById(req.params.id)
-    .orFail(new Error('UserNotFound'))
+    .orFail(new NotFoundError('Запрашиваемый пользователь не найден'))
     .then((user) => {
       res.send({ data: user });
     })
     .catch((err) => {
-      if (err.message === 'UserNotFound') {
-        res.status(errCodeNotFound).send({ message: 'Запрашиваемый пользователь не найден' });
-      } else if (err.name === 'CastError') {
-        res.status(errCode).send({ message: 'Невалидный id' });
+      if (err.name === 'CastError') {
+        next(new CastError('Невалидный id пользователя'));
       } else {
-        res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
+        next(err);
       }
     });
 };
 
-module.exports.createUser = (req, res) => {
-  const { name, about, avatar } = req.body;
+module.exports.getUsers = (req, res, next) => {
+  User.find({})
+    .then((users) => res.send({ data: users }))
+    .catch(next);
+};
 
-  User.create({ name, about, avatar })
-    .then((user) => res.send({ data: user }))
+module.exports.createUser = (req, res, next) => {
+  bcrypt.hash(req.body.password, 10)
+    .then((hash) => User.create({
+      name: req.body.name,
+      about: req.body.about,
+      avatar: req.body.avatar,
+      email: req.body.email,
+      password: hash,
+    }))
+    .then((user) => res.send({
+      _id: user._id,
+      name: user.name,
+      about: user.about,
+      avatar: user.avatar,
+      email: user.email,
+    }))
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        res.status(errCode).send({ message: 'Неверные данные' });
+        next(new BadRequestError('Неверные данные'));
+      } else if (err.name === 'MongoError' && err.code === 11000) {
+        next(new DuplicatedIdError('Пользователь уже существует'));
       } else {
-        res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
+        next(err);
       }
     });
 };
 
-module.exports.updateProfile = (req, res) => {
+module.exports.updateProfile = (req, res, next) => {
   const { name, about } = req.body;
   const filteredBody = {};
 
@@ -61,24 +85,19 @@ module.exports.updateProfile = (req, res) => {
       runValidators: true,
     },
   )
-    .orFail(new Error('UserNotFound'))
     .then((user) => {
       res.send({ user });
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        res.status(errCode).send({ message: 'Переданы некорректные данные при обновлении профиля' });
-      } else if (err.name === 'CastError') {
-        res.status(errCode).send({ message: 'Невалидный id пользователя' });
-      } else if (err.message === 'UserNotFound') {
-        res.status(errCodeNotFound).send({ message: 'Пользователь с указанным _id не найден' });
+        next(new BadRequestError('Переданы некорректные данные при обновлении профиля'));
       } else {
-        res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
+        next(err);
       }
     });
 };
 
-module.exports.updateAvatar = (req, res) => {
+module.exports.updateAvatar = (req, res, next) => {
   const { avatar } = req.body;
 
   User.findByIdAndUpdate(
@@ -89,19 +108,36 @@ module.exports.updateAvatar = (req, res) => {
       runValidators: true,
     },
   )
-    .orFail(new Error('UserNotFound'))
     .then((user) => {
       res.send({ user });
     })
     .catch((err) => {
       if (err.name === 'ValidationError') {
-        res.status(errCode).send({ message: 'Переданы некорректные данные при обновлении аватара' });
-      } else if (err.name === 'CastError') {
-        res.status(errCode).send({ message: 'Невалидный id пользователя' });
-      } else if (err.message === 'UserNotFound') {
-        res.status(errCodeNotFound).send({ message: 'Пользователь с указанным _id не найден' });
+        next(new BadRequestError('Переданы некорректные данные при обновлении профиля'));
       } else {
-        res.status(errCodeDefault).send({ message: 'На сервере произошла ошибка' });
+        next(err);
+      }
+    });
+};
+
+module.exports.login = (req, res, next) => {
+  const { email, password } = req.body;
+
+  return User.findUserByCredentials(email, password)
+    .then((user) => {
+      const token = jwt.sign({ _id: user._id },
+        'super-strong-secret',
+        { expiresIn: '7d' });
+
+      res.cookie('jwt', token, { httpOnly: true })
+        .send({ message: 'Вы успешно вошли в приложение!' })
+        .end();
+    })
+    .catch((err) => {
+      if (err.statusCode === 401) {
+        next(new AuthError(err.message));
+      } else {
+        next(err);
       }
     });
 };
