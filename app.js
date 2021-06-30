@@ -9,6 +9,7 @@ const auth = require('./middlewares/auth');
 const { createUser, login } = require('./controllers/users');
 const { validateSignUp, validateSignIn } = require('./middlewares/validation');
 const NotFoundError = require('./errors/not-found-err');
+const { serverUrl, dbName, mongoParams} = require('./utils/constants');
 
 const app = express();
 app.use(helmet());
@@ -16,12 +17,17 @@ app.use(cookieParser());
 
 const { PORT = 3000 } = process.env;
 
-mongoose.connect('mongodb://localhost:27017/mestodb', {
-  useNewUrlParser: true,
-  useCreateIndex: true,
-  useFindAndModify: false,
-  useUnifiedTopology: true,
-});
+const connectDB = async () => {
+  try {
+    await mongoose.connect(`mongodb://${serverUrl}/${dbName}`, mongoParams);
+    console.log('База данных MongoDB подключена');
+  } catch (err) {
+    console.log('Проблемы с подключением к MongoDB', err);
+    process.exit(1);
+  }
+};
+
+connectDB();
 
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());

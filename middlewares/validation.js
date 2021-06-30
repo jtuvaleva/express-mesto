@@ -52,16 +52,19 @@ module.exports.validateSignIn = celebrate({
 
 module.exports.validateUpdateProfileEntry = celebrate({
   body: Joi.object().keys({
-    name: Joi.string().allow('').default('Жак-Ив Кусто')
+    name: Joi.string().not('')
       .min(2)
       .max(30)
       .messages({
         'string.min': 'Минимальная длина поля 2 символа',
         'string.max': 'Максимальная длина поля 30 символов',
+        'any.invalid': 'Поле должно быть заполненным',
       }),
-    about: Joi.string().allow('').default('Исследователь').min(2)
+    about: Joi.string().invalid('')
+      .min(2)
       .max(30)
       .messages({
+        'any.invalid': 'Поле должно быть заполненным',
         'string.min': 'Минимальная длина поля 2 символа',
         'string.max': 'Максимальная длина поля 30 символов',
       }),
@@ -74,6 +77,7 @@ module.exports.validateUpdateAvatarEntry = celebrate({
       .messages({
         'string.min': 'Минимальная длина поля 10 символов',
         'string.uri': 'Некорректная ссылка для аватара пользователя',
+        'any.invalid': 'Поле должно быть заполненным',
       }),
   }),
 });
