@@ -8,8 +8,10 @@ const handleError = require('./middlewares/handleError');
 const auth = require('./middlewares/auth');
 const { createUser, login } = require('./controllers/users');
 const { validateSignUp, validateSignIn } = require('./middlewares/validation');
+const { requestLogger, errorLogger } = require('./middlewares/logger');
+
 const NotFoundError = require('./errors/not-found-err');
-const { serverUrl, dbName, mongoParams} = require('./utils/constants');
+const { serverUrl, dbName, mongoParams } = require('./utils/constants');
 
 const app = express();
 app.use(helmet());
@@ -32,6 +34,8 @@ connectDB();
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(bodyParser.json());
 
+app.use(requestLogger);
+
 app.post('/signin', validateSignIn, login);
 app.post('/signup', validateSignUp, createUser);
 
@@ -40,10 +44,14 @@ app.use(auth);
 app.use('/users', require('./routes/users'));
 app.use('/cards', require('./routes/cards'));
 
+app.use(errorLogger);
+
 app.use('*', () => {
   throw new NotFoundError('Неверный роутер, страница не найдена');
 });
 
 app.use(handleError);
 
-app.listen(PORT);
+app.listen(PORT, () => {
+  console.log(`App listening on port ${PORT}`);
+});
